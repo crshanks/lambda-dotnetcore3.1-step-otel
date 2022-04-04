@@ -3,7 +3,16 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   lambda-dotnetcore3.1-step-otel
 
-  Sample SAM Template for lambda-dotnetcore3.1-step-otel
+  Demo NR Opentelemetry SAM template
+
+Parameters:
+  newRelicLicenseKey:
+    Type: String
+    Description: A New Relic license key.
+  newRelicEndpoint:
+    Type: String
+    Description: New Relic OpenTelemetry endpoint to use.
+    Default: otlp.nr-data.net:4317
 
 Resources:
   StockTradingStateMachine:
@@ -16,6 +25,8 @@ Resources:
         StockBuyerFunctionArn: !GetAtt StockBuyerFunction.Arn
         DDBPutItem: !Sub arn:${AWS::Partition}:states:::dynamodb:putItem
         DDBTable: !Ref TransactionTable
+      Tracing:
+        Enabled: true
       Events:
         HourlyTradingSchedule:
           Type: Schedule # More info about Schedule Event Source: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-property-statemachine-schedule.html
@@ -37,28 +48,101 @@ Resources:
     Type: AWS::Serverless::Function # More info about Function Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html
     Properties:
       CodeUri: ./functions/StockChecker/
-      Handler: StockChecker::StockChecker.Function::FunctionHandler
+      Handler: StockChecker::StockChecker.Function::TracingFunctionHandler
       Runtime: dotnetcore3.1
       Architectures:
         - x86_64
+      Environment:
+        Variables:
+          NEW_RELIC_LICENSE_KEY: !Ref newRelicLicenseKey
+          NEW_RELIC_OPENTELEMETRY_ENDPOINT: !Ref newRelicEndpoint
+          OTEL_SERVICE_NAME: StockChecker
+          OPENTELEMETRY_COLLECTOR_CONFIG_FILE: /var/task/collector.yaml
+      MemorySize: 512
+      Layers:
+        # Use this if using x86_64 architecture
+        - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:901920570463:layer:aws-otel-collector-amd64-ver-0-45-0:2
+      Policies:
+        # Function's execution role
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - AWSXrayWriteOnlyAccess
+      Tracing: Active
+      Timeout: 30
 
   StockSellerFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ./functions/StockSeller/
-      Handler: StockSeller::StockSeller.Function::FunctionHandler
+      Handler: StockSeller::StockSeller.Function::TracingFunctionHandler
       Runtime: dotnetcore3.1
       Architectures:
         - x86_64
+      Environment:
+        Variables:
+          NEW_RELIC_LICENSE_KEY: !Ref newRelicLicenseKey
+          NEW_RELIC_OPENTELEMETRY_ENDPOINT: !Ref newRelicEndpoint
+          OTEL_SERVICE_NAME: StockSeller
+          OPENTELEMETRY_COLLECTOR_CONFIG_FILE: /var/task/collector.yaml
+      Layers:
+        # Use this if using x86_64 architecture
+        - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:901920570463:layer:aws-otel-collector-amd64-ver-0-45-0:2
+      MemorySize: 512
+      Policies:
+        # Function's execution role
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - AWSXrayWriteOnlyAccess
+      Tracing: Active
+      Timeout: 30
 
   StockBuyerFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ./functions/StockBuyer/
-      Handler: StockBuyer::StockBuyer.Function::FunctionHandler
+      Handler: StockBuyer::StockBuyer.Function::TracingFunctionHandler
       Runtime: dotnetcore3.1
       Architectures:
         - x86_64
+      Environment:
+        Variables:
+          NEW_RELIC_LICENSE_KEY: !Ref newRelicLicenseKey
+          NEW_RELIC_OPENTELEMETRY_ENDPOINT: !Ref newRelicEndpoint
+          OTEL_SERVICE_NAME: StockBuyer
+          OPENTELEMETRY_COLLECTOR_CONFIG_FILE: /var/task/collector.yaml
+      MemorySize: 512
+      Layers:
+        # Use this if using x86_64 architecture
+        - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:901920570463:layer:aws-otel-collector-amd64-ver-0-45-0:2
+      Policies:
+        # Function's execution role
+        - AWSLambdaBasicExecutionRole
+        - AWSLambda_ReadOnlyAccess
+        - AWSXrayWriteOnlyAccess
+      Tracing: Active
+      Timeout: 30
+
+  # We override log retention since by default there is no retention limit which
+  # is both wasteful and expensive. This log group gets created by AWS Lambda
+  # automatically, so we need to explicitly create it ourselves to ensure a sensible
+  # retention period.
+  LogsStockCheckerFunction:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${StockCheckerFunction}"
+      RetentionInDays: 7
+
+  LogsStockSellerFunction:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${StockSellerFunction}"
+      RetentionInDays: 7
+
+  LogsStockBuyerFunction:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${StockBuyerFunction}"
+      RetentionInDays: 7
 
   TransactionTable:
     Type: AWS::Serverless::SimpleTable # More info about SimpleTable Resource: https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-simpletable.html

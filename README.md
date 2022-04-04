@@ -42,9 +42,18 @@ To use the SAM CLI, you need the following tools:
 To build and deploy your application for the first time, run the following in your shell:
 
 ```bash
+export NEW_RELIC_LICENSE_KEY=<your-newrelic-license-key>
+make deploy
+```
+
+or, alternatively, use:
+
+```
 sam build
 sam deploy --guided
 ```
+
+Note that if you use the guided deploy, ensuring that you reply `No` to the question `Allow SAM CLI IAM role creation [Y/n]:` and for the subsequent field `Capabilities [['CAPABILITY_IAM']]:` enter `CAPABILITY_NAMED_IAM`.
 
 The first command will build the source of your application. The second command will package and deploy your application to AWS, with a series of prompts:
 
